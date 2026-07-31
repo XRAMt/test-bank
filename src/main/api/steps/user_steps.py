@@ -98,7 +98,7 @@ class UserSteps(BaseSteps):
         response = CrudRequester(
             RequestSpecs.auth_headers(username=create_user_request.username, password=create_user_request.password),
             Endpoint.ACCOUNT_CREDIT_REPAY,
-            ResponseSpecs.request_bad()
+            ResponseSpecs.request_unprocessable_entity()
         ).post(repay_credit_request)
         return response
 

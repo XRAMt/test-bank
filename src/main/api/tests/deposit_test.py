@@ -1,18 +1,18 @@
 import pytest
 from sqlalchemy.orm import Session
 from src.main.api.classes.api_manager import ApiManager
-from src.main.api.db.crud.transaction_crud import TransactionCrudDb
 from src.main.api.models.create_account_response import CreateAccountResponse
 from src.main.api.models.create_user_request import CreateUserRequest
-from src.main.api.models.deposit_request import DepositRequest
-from src.main.api.db.crud.account_crud import AccountCrudDb
+from src.main.api.db.steps.db_steps import DbSteps
+from src.main.api.generators.deposit_request_generator import DepositRequestGenerator
+
+
 
 @pytest.mark.api
 class TestDeposit:
     def test_deposit(self, db_session: Session, api_manager: ApiManager, create_user_request: CreateUserRequest, create_account_response: CreateAccountResponse):
-        deposit_request = DepositRequest(
-            accountId=create_account_response.id,
-            amount=1000
+        deposit_request = DepositRequestGenerator.valid(
+            create_account_response.id
         )
 
         response = api_manager.user_steps.deposit(
@@ -20,40 +20,31 @@ class TestDeposit:
             deposit_request
         )
 
-        account =  AccountCrudDb.get_account_by_id(
-            db_session,
+        assert response.balance == deposit_request.amount, \
+            "Баланс в ответе должен совпадать с суммой пополнения"
+
+        db_steps = DbSteps(db_session)
+
+        account = db_steps.get_account(
             create_account_response.id
         )
 
-        transaction = TransactionCrudDb.get_last_transaction_by_account_id(
-            db_session,
-            create_account_response.id
+        assert account.balance == response.balance, \
+            "Баланс счета в БД должен совпадать с ответом API"
+
+        db_steps.assert_deposit_transaction_created(
+            account_id=create_account_response.id,
+            request=deposit_request
         )
-
-        assert response.balance == deposit_request.amount
-        assert account.balance == deposit_request.amount
-        assert account.balance == response.balance
-
-        assert transaction.to_account_id == create_account_response.id
-        assert transaction.from_account_id is None
-        assert transaction.credit_id is None
-        assert transaction.amount == deposit_request.amount
-        assert transaction.transaction_type == "deposit"
-        assert transaction is not None, 'Проведенной транзакции нет в БД!'
 
     def test_deposit_invalid_amount(self, db_session: Session, api_manager: ApiManager, create_user_request: CreateUserRequest, create_account_response: CreateAccountResponse):
-        deposit_request = DepositRequest(
-            accountId=create_account_response.id,
-            amount=228
-        )
-
-        account_before = AccountCrudDb.get_account_by_id(
-            db_session,
+        deposit_request = DepositRequestGenerator.invalid_min_amount(
             create_account_response.id
         )
 
-        transaction_before = TransactionCrudDb.get_last_transaction_by_account_id(
-            db_session,
+        db_steps = DbSteps(db_session)
+
+        account_before = db_steps.get_account(
             create_account_response.id
         )
 
@@ -62,17 +53,13 @@ class TestDeposit:
             deposit_request
         )
 
-        account_after = AccountCrudDb.get_account_by_id(
-            db_session,
+        account_after = db_steps.get_account(
             create_account_response.id
         )
 
-        transaction_after = TransactionCrudDb.get_last_transaction_by_account_id(
-            db_session,
+        assert account_after.balance == account_before.balance, \
+            "Баланс счета не должен измениться!"
+
+        db_steps.assert_deposit_transaction_not_created(
             create_account_response.id
         )
-
-        assert account_after.balance == account_before.balance
-
-        #assert transaction_before is None, 'Транзакция есть в БД, ошибка!'
-        assert transaction_after is None, 'Транзакция есть в БД, ошибка!'
