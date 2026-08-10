@@ -3,6 +3,7 @@ import pytest
 from src.main.api.models.credit_request import CreditRequest
 from src.main.api.models.create_user_request import CreateUserRequest
 from src.main.api.generators.model_generator import RandomModelGenerator
+from src.main.api.generators.deposit_request_generator import DepositRequestGenerator
 
 @pytest.fixture
 def create_user_request(api_manager):
@@ -54,5 +55,22 @@ def create_active_credit(api_manager, create_credit_user_request, create_credit_
         credit_request
     )
 
+@pytest.fixture
+def create_funded_accounts(api_manager, create_user_request, create_accounts_response):
+    from_account, to_account = create_accounts_response
 
+    deposit_request = DepositRequestGenerator.valid(
+        from_account.id
+    )
+
+    api_manager.user_steps.deposit(
+        create_user_request,
+        deposit_request
+    )
+
+    return (
+        from_account,
+        to_account,
+        deposit_request.amount
+    )
 

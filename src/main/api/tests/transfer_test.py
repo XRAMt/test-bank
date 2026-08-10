@@ -1,33 +1,18 @@
 import pytest
 
 from src.main.api.generators.transfer_request_generator import TransferRequestGenerator
-from src.main.api.generators.deposit_request_generator import DepositRequestGenerator
 from src.main.api.db.steps.db_steps import DbSteps
 
 @pytest.mark.api
 class TestTransfer:
 
-    def test_transfer(self, api_manager, db_session, create_user_request, create_accounts_response):
-        from_account, to_account = create_accounts_response
-
-        deposit_request = DepositRequestGenerator.valid(
-            from_account.id
-        )
-
-        api_manager.user_steps.deposit(
-            create_user_request,
-            deposit_request
-        )
+    def test_transfer(self, api_manager, db_session, create_user_request, create_funded_accounts):
+        from_account, to_account, balance = create_funded_accounts
 
         transfer_request = TransferRequestGenerator.valid(
             from_account.id,
             to_account.id,
-            deposit_request.amount
-        )
-
-        expected_balance = (
-                deposit_request.amount -
-                transfer_request.amount
+            balance
         )
 
         response = api_manager.user_steps.transfer(
@@ -41,9 +26,6 @@ class TestTransfer:
         assert response.toAccountId == to_account.id, \
             "ID счета получателя должен совпадать!"
 
-        assert response.fromAccountIdBalance == expected_balance, \
-            "Баланс счета отправителя после перевода рассчитан неверно!"
-
         db_steps = DbSteps(db_session)
 
         db_steps.assert_transfer_transaction_created(
@@ -53,23 +35,14 @@ class TestTransfer:
         from_account_db = db_steps.get_account(from_account.id)
         to_account_db = db_steps.get_account(to_account.id)
 
-        assert from_account_db.balance == expected_balance, \
-            "Баланс счета отправителя в БД рассчитан неверно"
+        assert from_account_db.balance == response.fromAccountIdBalance, \
+            "Баланс счета отправителя в БД должен совпадать с ответом API"
 
         assert to_account_db.balance == transfer_request.amount, \
-            "Баланс счета получателя в БД рассчитан неверно"
+            "Баланс счета получателя в БД должен совпадать с суммой перевода"
 
-    def test_transfer_invalid_amount(self, api_manager, db_session, create_user_request, create_accounts_response):
-        from_account, to_account = create_accounts_response
-
-        deposit_request = DepositRequestGenerator.valid(
-            from_account.id
-        )
-
-        api_manager.user_steps.deposit(
-            create_user_request,
-            deposit_request
-        )
+    def test_transfer_invalid_amount(self, api_manager, db_session, create_user_request, create_funded_accounts):
+        from_account, to_account, balance = create_funded_accounts
 
         db_steps = DbSteps(db_session)
 
